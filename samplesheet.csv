@@ -1,0 +1,4 @@
+sample,fastq_1,fastq_2
+GM12878_1,/data/xrz/PLAC/data/GM12878_1/SRR3467175_1.fastq.gz,/data/xrz/PLAC/data/GM12878_1/SRR3467175_2.fastq.gz
+GM12878_2,/data/xrz/PLAC/data/GM12878_2/SRR3467176_1.fastq.gz,/data/xrz/PLAC/data/GM12878_2/SRR3467176_2.fastq.gz
+
