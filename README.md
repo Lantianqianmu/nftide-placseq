@@ -58,13 +58,13 @@ Rscript -e 'renv::restore(lockfile = "renv.lock", prompt = FALSE)'
 
 This workflow also requires HiC-Pro and FitHiChIP. Users needed to install them manually. Set installation paths of `hicpro` and `fithichip_dir` in `nextflow.config`.
 
-(4) Prepare a Bowtie2 index, chromosome-size file, and restriction-fragment BED for the same reference. Modify `nextflow.config` accordingly. Current defaults are:
+(4) Prepare a Bowtie2 index, chromosome-size file, and restriction-fragment BED for the same reference. Modify `nextflow.config` accordingly. Current defaults for demonstration are:
 
 ```text
-Bowtie2 index prefix: /data/xrz/ref/hg38_HBV_A_bowtie2/hg38_HBV_A
-Chromosome sizes:    hg38_original_chrom_sizes.tsv
-MboI fragments:      hg38_HBV_A_MboI.bed
-Ligation sequence:  GATCGATC
+bowtie2_index: /data/xrz/ref/hg38_HBV_A_bowtie2/hg38_HBV_A
+chrom_sizes:    hg38_original_chrom_sizes.tsv
+genome_fragment:      hg38_HBV_A_MboI.bed
+ligation_site:  GATCGATC
 ```
 
 The chromosome-size file must include the reference sequences to be represented in the contact maps. The Bowtie2 parameter is an **index prefix**, not just the containing folder. Prepare restriction enzyme cut sites following the instruction of HiC-Pro, and provide the correct logation sequences for HiC-Pro.
