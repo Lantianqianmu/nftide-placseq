@@ -29,7 +29,7 @@ Python | With HiC-Pro dependencies and FitHiChIP's networkx dependency
 R | With packages required by HiC-Pro and FitHiChIP, including optparse, data.table, ggplot2, fdrtool and GenomicRanges
 bedToBigBed | Browser-output helper available in the pipeline's `bin/` directory
 
-HiC-Pro uses the dependency paths in its installed `config-system.txt`, so install HiC-Pro **after** the installation of the conda enviroment, and provide dependency paths of the placseq conda environment. FitHiChIP and peak calling use tools from the active environment. MACS2 and samtools have no explicit executable overrides in this workflow.
+HiC-Pro uses the dependency paths in its installed `config-system.txt`, so install HiC-Pro **after** the installation of the conda enviroment, and provide dependency paths of the placseq conda environment. 
 
 ## Installation ##
 
