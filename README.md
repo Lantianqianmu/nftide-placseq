@@ -56,7 +56,7 @@ Rscript -e 'renv::restore(lockfile = "renv.lock", prompt = FALSE)'
 
 `placseq.yml` recreates the pinned mamba/conda packages. `renv.lock` restores the R package versions into the repository-local `renv` library. The restore needs network access to CRAN and Bioconductor the first time it is run.
 
-This workflow also requires HiC-Pro and FitHiChIP. Users needed to install them manually. Set installation paths of `hicpro` and `fithichip_dir` in `nextflow.config`.
+This workflow also requires [HiC-Pro](https://github.com/nservant/HiC-Pro) and [FitHiChIP](https://github.com/ay-lab/FitHiChIP). Users needed to install them manually. Set installation paths of `hicpro` and `fithichip_dir` in `nextflow.config`.
 
 (4) Prepare a Bowtie2 index, chromosome-size file, and restriction-fragment BED for the same reference. Modify `nextflow.config` accordingly. Current defaults for demonstration are:
 
