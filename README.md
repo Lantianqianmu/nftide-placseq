@@ -20,7 +20,7 @@ Dependencies | Version / configuration
 Nextflow | 25.10.2
 Java | Compatible with the installed Nextflow; existing launcher uses the `hic` environment
 HiC-Pro | 3.1.0
-FitHiChIP | Installed at `/home/xrz/FitHiChIP`
+FitHiChIP | Manually installed by user
 MACS2 | 2.2.9.1; resolved from the active conda environment
 samtools | 1.16; resolved from the active conda environment for FitHiChIP
 Bowtie2 | Required by HiC-Pro
