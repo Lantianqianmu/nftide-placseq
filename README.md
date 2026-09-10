@@ -18,13 +18,13 @@ The default reference is **hg38_HBV_A**, with MboI restriction fragments. HiC-Pr
 Dependencies | Version / configuration
 ------------- | -------------
 Nextflow | 25.10.2
-Java | Compatible with the installed Nextflow; existing launcher uses the `hic` environment
-HiC-Pro | 3.1.0
-FitHiChIP | Manually installed by user
-MACS2 | 2.2.9.1; resolved from the active conda environment
-samtools | 1.16; resolved from the active conda environment for FitHiChIP
-Bowtie2 | Required by HiC-Pro
-bedtools, bgzip, tabix | Required by FitHiChIP
+HiC-Pro | 3.1.0; manually installed by user
+FitHiChIP | 11.0; manually installed by user
+MACS2 | 2.2.9.1
+samtools | 1.16
+Bowtie2 | 2.5.4
+bedtools | 2.26.0
+bgzip, tabix | Required by FitHiChIP
 Python | With HiC-Pro dependencies and FitHiChIP's networkx dependency
 R | With packages required by HiC-Pro and FitHiChIP, including optparse, data.table, ggplot2, fdrtool and GenomicRanges
 bedToBigBed | Browser-output helper available in the pipeline's `bin/` directory
