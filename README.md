@@ -13,7 +13,7 @@ If peak files are not provided, narrow peaks are inferred from HiC-Pro results u
 
 The default reference is **hg38_HBV_A**, with MboI restriction fragments. HiC-Pro produces raw and ICE-normalized contact maps at **5 kb, 10 kb, 100 kb, and 1 Mb**. FitHiChIP uses the **5 kb raw matrix**.
 
-## Software dependencies ##
+## Major Software dependencies ##
 
 Dependencies | Version / configuration
 ------------- | -------------
@@ -24,11 +24,11 @@ MACS2 | 2.2.9.1
 samtools | 1.16
 Bowtie2 | 2.5.4
 bedtools | 2.26.0
-bgzip, tabix | Required by FitHiChIP
 Python | With HiC-Pro dependencies and FitHiChIP's networkx dependency
 R | With packages required by HiC-Pro and FitHiChIP, including optparse, data.table, ggplot2, fdrtool and GenomicRanges
 bedToBigBed | Browser-output helper available in the pipeline's `bin/` directory
 
+Softwares installed by conda/mamba if not specified.  
 HiC-Pro uses the dependency paths in its installed `config-system.txt`, so install HiC-Pro **after** the installation of the conda enviroment, and provide dependency paths of the placseq conda environment. 
 
 ## Installation ##
