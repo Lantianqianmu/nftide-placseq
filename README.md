@@ -98,16 +98,6 @@ nextflow run main.nf \
   -resume -bg
 ```
 
-If Nextflow and Java are not on PATH in `placseq`, use the existing installation explicitly:
-
-```bash
-mamba run -n placseq env JAVA_HOME=/home/xrz/miniforge3/envs/hic \
-  /home/xrz/miniforge3/envs/hic/bin/nextflow run main.nf \
-  --input_csv samplesheet.csv \
-  -output-dir /data/xrz/PLAC/output \
-  -resume
-```
-
 `-output-dir`: Output directory; default is `/data/xrz/PLAC/output`.  
 `--input_csv`: Samplesheet; default is `samplesheet.csv`. Use `samplesheet_test.csv` for the included small inputs.  
 `-resume`: Reuse completed tasks whose inputs and settings match the cache. Keep both `work/` and `.nextflow/`. Interrupted tasks may need to restart.  
