@@ -127,7 +127,7 @@ Parameter | Default | Description
 `adapter_overlap` | `1` | Minimum adapter overlap
 `min_mapq` | `10` | HiC-Pro mapping-quality threshold
 `fithichip_bin_size` | `5000` | FitHiChIP BINSIZE; must occur in `bin_size`
-`fithichip_circular_genome` | `0` | CircularGenome
+`fithichip_circular_genome` | `0` | 1=CircularGenome, 0=Linear
 `fithichip_int_type` | `3` | IntType: peak-to-all interactions
 `fithichip_low_dist` | `20000` | Minimum loop distance in bp
 `fithichip_upp_dist` | `2000000` | Maximum loop distance in bp
