@@ -61,10 +61,10 @@ This workflow also requires [HiC-Pro](https://github.com/nservant/HiC-Pro) and [
 (4) Prepare a Bowtie2 index, chromosome-size file, and restriction-fragment BED for the same reference. Modify `nextflow.config` accordingly. Current defaults for demonstration are:
 
 ```text
-bowtie2_index: /data/xrz/ref/hg38_HBV_A_bowtie2/hg38_HBV_A
-chrom_sizes: hg38_original_chrom_sizes.tsv
-genome_fragment: hg38_HBV_A_MboI.bed
-ligation_site: GATCGATC
+bowtie2_index = "/data/xrz/ref/hg38_HBV_A_bowtie2/hg38_HBV_A"
+chrom_sizes = "hg38_original_chrom_sizes.tsv"
+genome_fragment = "hg38_HBV_A_MboI.bed"
+ligation_site = "GATCGATC"
 ```
 
 The chromosome-size file must include the reference sequences to be represented in the contact maps. The Bowtie2 parameter is an **index prefix**, not just the containing folder. Prepare restriction enzyme cut sites following the instruction of HiC-Pro, and provide the correct logation sequences for HiC-Pro.
