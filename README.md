@@ -13,7 +13,7 @@ If peak files are not provided, narrow peaks are inferred from HiC-Pro results u
 
 The default reference is **hg38_HBV_A**, with MboI restriction fragments. HiC-Pro produces raw and ICE-normalized contact maps at **5 kb, 10 kb, 100 kb, and 1 Mb**. FitHiChIP uses the **5 kb raw matrix**.
 
-## Major Software dependencies ##
+## Major software dependencies ##
 
 Dependencies | Version / configuration
 ------------- | -------------
