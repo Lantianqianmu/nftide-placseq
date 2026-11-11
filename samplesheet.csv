@@ -1,4 +1,6 @@
-sample,fastq_1,fastq_2
-GM12878_1,/data/xrz/PLAC/data/GM12878_1/SRR3467175_1.fastq.gz,/data/xrz/PLAC/data/GM12878_1/SRR3467175_2.fastq.gz
-GM12878_2,/data/xrz/PLAC/data/GM12878_2/SRR3467176_1.fastq.gz,/data/xrz/PLAC/data/GM12878_2/SRR3467176_2.fastq.gz
-
+sample,fastq_1,fastq_2,peak_file
+control-27ac-1,/reads/control_rep1_lane1_R1.fq.gz,/reads/control_rep1_lane1_R2.fq.gz,
+control-27ac-1,/reads/control_rep1_lane2_R1.fq.gz,/reads/control_rep1_lane2_R2.fq.gz,
+control-27ac-2,/reads/control_rep2_R1.fq.gz,/reads/control_rep2_R2.fq.gz,
+case-27ac-1,/reads/case_rep1_R1.fq.gz,/reads/case_rep1_R2.fq.gz,peaks/common_case_27ac.bed.gz
+case-27ac-2,/reads/case_rep2_R1.fq.gz,/reads/case_rep2_R2.fq.gz,peaks/common_case_27ac.bed.gz

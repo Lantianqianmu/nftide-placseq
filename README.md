@@ -1,229 +1,320 @@
-# nftide-placseq #
+# nftide-placseq
 
-Nextflow pipeline for paired-end PLAC-seq / HiChIP data using HiC-Pro and FitHiChIP.
+Nextflow pipeline for paired-end PLAC-seq / HiChIP data using HiC-Pro and FitHiChIP, with configurable loop-anchor peaks and per-sample 1D bigWig tracks.
 
-## Introduction ##
+## Workflow
 
-The pipeline merges FASTQs with the same sample name, uses cutadapt to remove Nextera adapters, and processes the trimmed reads with HiC-Pro. FitHiChIP then uses the HiC-Pro valid pairs, raw contact matrix, and bin intervals to call significant interactions.
+1. Merge FASTQ rows with the same **sample** ID.
+2. Trim adapters with cutadapt and process each sample independently with HiC-Pro.
+3. Select immunoprecipitation-enriched reads from each sample, run MACS2, and generate its 1D track.
+4. Assign loop-anchor peaks using the samplesheet's **peak_file** column. Missing shared paths trigger pooled peak discovery; blank fields use individual sample peaks.
+5. Run FitHiChIP for each sample with both backgrounds:
+   - **L:** `UseP2PBackgrnd=0`, peak-to-peak and peak-to-nonpeak background.
+   - **S:** `UseP2PBackgrnd=1`, peak-to-peak background.
 
-If peak files are not provided, narrow peaks are inferred from HiC-Pro results using `PeakInferHiChIP.sh` and MACS2. Each sample is processed with both FitHiChIP backgrounds:
+The default FitHiChIP resolution is **10 kb**, with a **20 kb–2 Mb** distance window. HiC-Pro generates raw and ICE-normalized matrices at the configured resolutions. The HiC-Pro-only workflow is maintained separately in [nftide-hicpro](https://github.com/Lantianqianmu/nftide-hicpro).
 
-- **FitHiChIP_L**: `UseP2PBackgrnd=0`, using peak-to-peak and peak-to-nonpeak interactions for background modeling.
-- **FitHiChIP_S**: `UseP2PBackgrnd=1`, using peak-to-peak interactions for background modeling.
+## Dependencies and installation
 
-The default reference is **hg38_HBV_A**, with MboI restriction fragments. HiC-Pro produces raw and ICE-normalized contact maps at **5 kb, 10 kb, 100 kb, and 1 Mb**. FitHiChIP uses the **5 kb raw matrix**.
+| Software | Configuration |
+| --- | --- |
+| Nextflow | 25.10.2, DSL2 and workflow output publishing |
+| Java | 17 |
+| HiC-Pro | 3.1.0, installed separately |
+| FitHiChIP | 11.0, installed separately |
+| MACS2 | 2.2.9.1 |
+| cutadapt | 4.9 |
+| Bowtie2 / samtools | 2.5.4 / 1.16.1 |
+| Python | Python 3; peak preparation uses the standard library |
+| R | With the packages required by HiC-Pro and FitHiChIP |
+| bedGraphToBigWig | UCSC executable, configured explicitly or detected in the active environment |
+| bedToBigBed | Browser-output helper distributed under `bin/` |
 
-## Software dependencies ##
-
-Dependencies | Version / configuration
-------------- | -------------
-Nextflow | 25.10.2
-Java | Compatible with the installed Nextflow; existing launcher uses the `hic` environment
-HiC-Pro | 3.1.0
-FitHiChIP | Installed at `/home/xrz/FitHiChIP`
-MACS2 | 2.2.9.1; resolved from the active conda environment
-samtools | 1.16; resolved from the active conda environment for FitHiChIP
-Bowtie2 | Required by HiC-Pro
-bedtools, bgzip, tabix | Required by FitHiChIP
-Python | With HiC-Pro dependencies and FitHiChIP's networkx dependency
-R | With packages required by HiC-Pro and FitHiChIP, including optparse, data.table, ggplot2, fdrtool and GenomicRanges
-bedToBigBed | Browser-output helper available in the pipeline's `bin/` directory
-
-HiC-Pro uses the dependency paths in its installed `config-system.txt`, so install HiC-Pro **after** the installation of the conda enviroment, and provide dependency paths of the placseq conda environment. FitHiChIP and peak calling use tools from the active environment. MACS2 and samtools have no explicit executable overrides in this workflow.
-
-## Installation ##
-
-(1) Clone the repository and enter the pipeline directory. Replace `<repository-url>` with the repository URL.
+Clone the repository and select the pipeline branch/release you intend to run:
 
 ```bash
-git clone <repository-url> nftide-placseq
+git clone https://github.com/Lantianqianmu/nftide-placseq.git
 cd nftide-placseq
-```
-
-(2) Create and activate the `placseq` mamba environment from the pinned package export:
-
-```bash
 mamba env create --file placseq.yml
 mamba activate placseq
 ```
 
-(3) Restore the recorded R package library from `renv.lock`. Run these commands from the `nftide-placseq` directory after activating `placseq`.
+`conda` can replace `mamba`. The environment export records Linux packages. Install [HiC-Pro](https://nservant.github.io/HiC-Pro/INSTALL.html) after preparing the environment so that its installed `config-system.txt` points to the intended dependencies. Install [FitHiChIP](https://github.com/ay-lab/FitHiChIP) separately.
+
+The R package library is recorded in `renv.lock`. When restoring that library, follow the renv setup needed by your installation; a repository-local renv restore does not automatically make that library visible to R scripts launched from the separate FitHiChIP installation. Ensure the required packages are available to those Rscript processes, for example through the active environment's R library or an explicitly configured `R_LIBS_USER`.
+
+Activate the intended environment before launching Nextflow. The workflow uses executable tools on `PATH`, plus the installation paths configured below.
+
+## Reference preparation and configuration
+
+Prepare a Bowtie2 index, chromosome sizes, and restriction-fragment BED from the **same reference genome**. The chromosome-size file contains sequence names and lengths; sequence names must agree across all assets and the supplied peaks.
+
+For example, for MboI:
 
 ```bash
-Rscript -e 'install.packages("renv", repos = "https://cloud.r-project.org")'
-Rscript -e 'renv::restore(lockfile = "renv.lock", prompt = FALSE)'
+mkdir -p reference/bowtie2
+bowtie2-build /path/to/genome.fa reference/bowtie2/genome
+samtools faidx /path/to/genome.fa
+cut -f1,2 /path/to/genome.fa.fai > reference/genome.chrom.sizes
+python /path/to/HiC-Pro/bin/utils/digest_genome.py \
+  -r '^GATC' -o reference/genome_MboI.bed /path/to/genome.fa
 ```
 
-`placseq.yml` recreates the pinned mamba/conda packages. `renv.lock` restores the R package versions into the repository-local `renv` library. The restore needs network access to CRAN and Bioconductor the first time it is run.
-
-This workflow also requires HiC-Pro and FitHiChIP. Users needed to install them manually. Set installation paths of `hicpro` and `fithichip_dir` in `nextflow.config`.
-
-(4) Prepare a Bowtie2 index, chromosome-size file, and restriction-fragment BED for the same reference. Modify `nextflow.config` accordingly. Current defaults are:
-
-```text
-Bowtie2 index prefix: /data/xrz/ref/hg38_HBV_A_bowtie2/hg38_HBV_A
-Chromosome sizes:    hg38_original_chrom_sizes.tsv
-MboI fragments:      hg38_HBV_A_MboI.bed
-Ligation sequence:  GATCGATC
-```
-
-The chromosome-size file must include the reference sequences to be represented in the contact maps. The Bowtie2 parameter is an **index prefix**, not just the containing folder. Prepare restriction enzyme cut sites following the instruction of HiC-Pro, and provide the correct logation sequences for HiC-Pro.
-
-## Usage ##
-
-(1) Prepare `samplesheet.csv`. The CSV file **must** contain three columns with these names:
-
-`sample`: Name of the sequenced library and its output folder. FASTQs with the same sample name are merged before processing. Use letters, numbers, underscores, periods, or hyphens; start the name with a letter or number.  
-`fastq_1`: Absolute path to the gzipped read 1 FASTQ.  
-`fastq_2`: Absolute path to the matching gzipped read 2 FASTQ.
-
-```csv
-sample,fastq_1,fastq_2
-sample1,/path/sample1_lane1_R1.fastq.gz,/path/sample1_lane1_R2.fastq.gz
-sample1,/path/sample1_lane2_R1.fastq.gz,/path/sample1_lane2_R2.fastq.gz
-sample2,/path/sample2_R1.fastq.gz,/path/sample2_R2.fastq.gz
-```
-
-Rows sharing a sample name are concatenated in CSV order. Input filenames must be distinct within each merge task because the workflow stages them by filename.
-
-(2) Run the Nextflow pipeline:
-
-```bash
-nextflow run main.nf \
-  --input_csv samplesheet.csv \
-  -output-dir /data/xrz/PLAC/output \
-  -with-report nf_plac_report.html \
-  -with-timeline nf_plac_timeline.html \
-  -with-trace nf_plac_trace.tsv \
-  -resume -bg
-```
-
-If Nextflow and Java are not on PATH in `placseq`, use the existing installation explicitly:
-
-```bash
-mamba run -n placseq env JAVA_HOME=/home/xrz/miniforge3/envs/hic \
-  /home/xrz/miniforge3/envs/hic/bin/nextflow run main.nf \
-  --input_csv samplesheet.csv \
-  -output-dir /data/xrz/PLAC/output \
-  -resume
-```
-
-`-output-dir`: Output directory; default is `/data/xrz/PLAC/output`.  
-`--input_csv`: Samplesheet; default is `samplesheet.csv`. Use `samplesheet_test.csv` for the included small inputs.  
-`-resume`: Reuse completed tasks whose inputs and settings match the cache. Keep both `work/` and `.nextflow/`. Interrupted tasks may need to restart.  
-`-bg`: Run Nextflow in the background.
-
-All analysis settings are exposed in `nextflow.config` and can be overridden with `--parameter value`. The workflow generates per-task HiC-Pro and FitHiChIP configuration files; it does **not** read the legacy `config-hicpro.txt`.
-
-Parameter | Default | Description
-------------- | ------------- | -------------
-`bowtie2_index` | hg38_HBV_A index prefix shown above | Shared Bowtie2 index
-`chrom_sizes` | `hg38_original_chrom_sizes.tsv` | Chromosome names and lengths
-`genome_fragment` | `hg38_HBV_A_MboI.bed` | Restriction fragments
-`ligation_site` | `GATCGATC` | HiC-Pro ligation junction
-`bin_size` | `5000 10000 100000 1000000` | HiC-Pro matrix resolutions in bp
-`hicpro_cpus` | `16` | HiC-Pro task CPUs and generated N_CPU
-`min_read_length` | `2` | Minimum cutadapt read length for each mate
-`adapter_overlap` | `1` | Minimum adapter overlap
-`min_mapq` | `10` | HiC-Pro mapping-quality threshold
-`fithichip_bin_size` | `5000` | FitHiChIP BINSIZE; must occur in `bin_size`
-`fithichip_circular_genome` | `0` | CircularGenome
-`fithichip_int_type` | `3` | IntType: peak-to-all interactions
-`fithichip_low_dist` | `20000` | Minimum loop distance in bp
-`fithichip_upp_dist` | `2000000` | Maximum loop distance in bp
-`fithichip_bias_type` | `1` | Coverage-bias correction
-`fithichip_merge_int` | `1` | Merge filtering enabled
-`fithichip_qvalue` | `0.05` | Loop-significance QVALUE threshold
-`fithichip_cpus` | `16` | Nextflow CPU allocation and OMP_NUM_THREADS
-`fithichip_peak_file` | Empty | Shared peak file or sample-to-path map
-`fithichip_read_length` | `150` | Read length supplied to PeakInferHiChIP.sh
-`fithichip_peak_genome` | `hs` | MACS2 effective-genome-size argument
-
-Both backgrounds are always run: `UseP2PBackgrnd` is assigned to 0 and 1 by the workflow. `ValidPairs`, `Interval`, and `Matrix` come directly from the corresponding sample's HiC-Pro output. `Interval` and `Matrix` use the raw matrix resolution selected by `fithichip_bin_size`, not the ICE-normalized matrix.
-
-By default, each process has `maxForks=2` and the executor is local. Different pipeline stages can run concurrently. Adjust `process.cpus`, `hicpro_cpus`, `fithichip_cpus`, and `maxForks` in `nextflow.config` for the available resources.
-
-(3) Configure peak input.
-
-Leave `fithichip_peak_file` empty to infer narrow peaks from HiC-Pro dangling-end, self-circle, re-ligation, and short-range valid pairs. The required interaction-class files are retained by the default `get_all_interaction_classes=1`.
-
-The MACS2 options are exposed as `fithichip_macs2_options`:
-
-```text
--q 0.05 --nomodel --shift 0 --extsize 200 --keep-dup all -B --SPMR --nolambda
-```
-
-Alternatively, provide a shared BED/narrowPeak file, optionally gzipped:
-
-```bash
-nextflow run main.nf --fithichip_peak_file /path/reference.narrowPeak -resume
-```
-
-For different peak files per sample, set a map in a Nextflow config:
+Configure paths and analysis settings in `nextflow.config` or an additional `site.config`:
 
 ```groovy
-params.fithichip_peak_file = [
-    GM12878_1: '/path/GM12878_1.narrowPeak',
-    GM12878_2: '/path/GM12878_2.narrowPeak'
+params {
+    input_csv = '/path/to/samplesheet.csv'
+    bowtie2_index = '/path/to/reference/bowtie2/genome'
+    chrom_sizes = '/path/to/reference/genome.chrom.sizes'
+    genome_fragment = '/path/to/reference/genome_MboI.bed'
+    ligation_site = 'GATCGATC'
+    hicpro = '/path/to/HiC-Pro/bin/HiC-Pro'
+    fithichip_dir = '/path/to/FitHiChIP'
+    bedgraph_to_bigwig = '/path/to/bedGraphToBigWig'
+    bin_size = '5000 10000 100000 1000000'
+    fithichip_bin_size = 10000
+}
+
+outputDir = '/path/to/results'
+workflow.output.mode = 'copy'
+cleanup = false
+```
+
+The Bowtie2 path is an **index prefix** with all six `.bt2` or all six `.bt2l` files. Change the restriction fragments and ligation junction together for other enzymes. Adapter sequences must match the library preparation. Reference assets and sequencing data are supplied by the user.
+
+### Main parameters
+
+| Parameter | Default / use |
+| --- | --- |
+| `input_csv` | Project `samplesheet.csv` |
+| `bowtie2_index`, `chrom_sizes`, `genome_fragment` | Set for the reference genome |
+| `hicpro`, `fithichip_dir` | Set for the software installations |
+| `bedgraph_to_bigwig` | Explicit executable path; set to `''` for active-conda/PATH detection |
+| `bin_size` | `5000 10000 100000 1000000` bp; spaces or commas accepted |
+| `fithichip_bin_size` | `10000` bp; must also occur in `bin_size` |
+| `hicpro_cpus`, `fithichip_cpus` | `16` each |
+| `adapter_r1`, `adapter_r2` | `CTGTCTCTTATACACATCT`; change for the library |
+| `min_read_length`, `adapter_overlap` | `2` bp per mate, `1` bp overlap |
+| `min_mapq` | `10` |
+| `rm_dup`, `get_all_interaction_classes` | Must be `1` for this workflow |
+| `fithichip_read_length` | `150` bp; used to reconstruct BED read ends for MACS2 |
+| `fithichip_peak_genome` | `hs`; set MACS2's effective genome size for the reference |
+| `fithichip_macs2_options` | `-q 0.05 --extsize 147 --nomodel` |
+| `fithichip_macs2_broad_cutoff` | `0.1` |
+| `fithichip_int_type` | `3`, peak-to-all |
+| `fithichip_low_dist`, `fithichip_upp_dist` | `20000`, `2000000` bp |
+| `fithichip_bias_type`, `fithichip_merge_int` | `1`, `1` |
+| `fithichip_qvalue` | `0.05`, loop-significance threshold |
+
+All remaining HiC-Pro and FitHiChIP analysis settings are exposed in `nextflow.config`. The workflow generates each task's native configuration from these parameters. The legacy `config-hicpro.txt` is not read by the workflow.
+
+The default executor is `local`, with `process.cpus=16` and `process.maxForks=4`. `PLAC_SIGNAL` and `SHARED_PEAKS` request two CPUs each; HiC-Pro and FitHiChIP use their dedicated CPU parameters. `maxForks` applies per process, so stages can run concurrently. Adapt executor/resources to the available machine or scheduler.
+
+## Samplesheet: four required columns
+
+```csv
+sample,fastq_1,fastq_2,peak_file
+control-27ac-1,/reads/control_rep1_lane1_R1.fq.gz,/reads/control_rep1_lane1_R2.fq.gz,
+control-27ac-1,/reads/control_rep1_lane2_R1.fq.gz,/reads/control_rep1_lane2_R2.fq.gz,
+control-27ac-2,/reads/control_rep2_R1.fq.gz,/reads/control_rep2_R2.fq.gz,
+case-27ac-1,/reads/case_rep1_R1.fq.gz,/reads/case_rep1_R2.fq.gz,reference/chip_27ac.bed.gz
+case-27ac-2,/reads/case_rep2_R1.fq.gz,/reads/case_rep2_R2.fq.gz,reference/chip_27ac.bed.gz
+```
+
+- **sample:** library/sample ID and output-folder name. Start with a letter or number; letters, numbers, underscores, periods, and hyphens are accepted.
+- **fastq_1 / fastq_2:** matching gzipped paired-end FASTQs. Absolute paths are recommended. Relative FASTQ paths are resolved against the samplesheet directory.
+- **peak_file:** optional peak-file path. **Keep the column and trailing comma when the value is blank.** Relative peak paths are resolved against the samplesheet directory and normalized before grouping.
+
+Rows with the same sample ID are merged in CSV order **before alignment and duplicate removal**. These should be sequencing lanes of the same library. Give separate biological samples different IDs. All rows for one sample must repeat the same `peak_file` value, including blank values. Repeated FASTQ basenames in different lane folders are supported through separate staging directories.
+
+### How the peak_file column works
+
+| `peak_file` value at workflow start | FitHiChIP loop-anchor peaks |
+| --- | --- |
+| Path to an existing, readable, nonempty file | Use that supplied peak set for the sample |
+| Nonempty path that does not exist | Pool peak-calling BED reads from all samples with the same normalized path, call one peak set, and use it for every member |
+| Blank field | Use peaks inferred separately from that sample's reads |
+
+**The condition is checked at workflow start.** An existing directory, empty file, or unreadable file is an error rather than a request for inference. A missing path used by only one sample produces a one-sample peak group.
+
+#### A. Use an existing peak file
+
+```csv
+sample,fastq_1,fastq_2,peak_file
+control-27ac-1,/reads/control_R1.fq.gz,/reads/control_R2.fq.gz,/peaks/chip_27ac.narrowPeak
+case-27ac-1,/reads/case_R1.fq.gz,/reads/case_R2.fq.gz,/peaks/chip_27ac.narrowPeak
+```
+
+If `/peaks/chip_27ac.narrowPeak` exists, both samples use that peak set. Their FASTQs, HiC-Pro contacts, FitHiChIP calls, and 1D tracks remain separate.
+
+Plain or gzip-compressed BED, narrowPeak, and broadPeak files are accepted. BED intervals are **zero-based, half-open**. Blank lines and `#`, `track`, and `browser` headers are ignored. Peak preparation retains additional columns, clips intervals to the chromosome bounds, and removes intervals on sequences absent from `chrom_sizes`; `validation.json` reports these actions. The original input file is unchanged. A file with no usable intervals fails clearly.
+
+#### B. Infer one shared peak set
+
+```csv
+sample,fastq_1,fastq_2,peak_file
+control-27ac-1,/reads/control_R1.fq.gz,/reads/control_R2.fq.gz,peaks/common_27ac.bed.gz
+case-27ac-1,/reads/case_R1.fq.gz,/reads/case_R2.fq.gz,peaks/common_27ac.bed.gz
+```
+
+If `peaks/common_27ac.bed.gz` does not exist, the workflow concatenates the two samples' selected MACS2 input BEDs, sorts them, and calls MACS2 once for the group. Samples are deduplicated individually before pooling; MACS2's configured read-tag duplicate filtering still applies to the pooled input.
+
+The shared result is published both under `results/shared_peaks/group_<path-hash>/peaks/` and at the requested path, creating its parent directories. A requested `.gz` path receives gzip-compressed BED content. Existing destination files are not overwritten by group publication. Use a writable shared filesystem path visible to the tasks.
+
+On a later run, the generated path exists and is handled as a supplied peak file. To request a new pooled call after changing group membership, inputs, or settings, use a new missing output path or deliberately remove the old generated file. The peak-file status is excluded from alignment cache keys, so this transition does not itself force HiC-Pro to rerun.
+
+Pooling here is **only for peak discovery**. The original sample contact matrices, valid pairs, and FitHiChIP analyses remain independent. Share a path only across compatible samples of the same assay target/reference. Groups mixing broad and narrow MACS2 target classes are rejected before FASTQ processing.
+
+#### C. Infer peaks separately
+
+```csv
+sample,fastq_1,fastq_2,peak_file
+control-27ac-1,/reads/control_R1.fq.gz,/reads/control_R2.fq.gz,
+case-27ac-1,/reads/case_R1.fq.gz,/reads/case_R2.fq.gz,
+```
+
+Each sample receives its own inferred peak set. Multiple FASTQ rows sharing one sample ID contribute to that sample's inference after their normal merge/alignment/deduplication.
+
+The former `fithichip_peak_file` configuration parameter is replaced by this CSV column. Move any nonempty legacy assignment into the samplesheet; nonempty legacy settings produce an explicit migration error.
+
+## Which reads are used for peaks and 1D signal?
+
+For each sample, the workflow selects:
+
+1. **Dangling-end pairs** (`*.DEPairs`).
+2. **Self-circle pairs** (`*.SCPairs`).
+3. **Re-ligation pairs** (`*.REPairs`).
+4. **Duplicate-removed cis valid pairs with separation strictly below 1,000 bp**, read directly from `<sample>.allValidPairs`.
+
+The DE/SC/RE files can contain duplicates. The combined selected pairs are deduplicated using the two mapped chromosome/position coordinates, with pair orientation canonicalized, within each sample. The workflow does not fall back to pre-deduplication `*.validPairs` files. Both read ends are converted to strand-aware BED intervals using `fithichip_read_length` and clipped to the reference.
+
+Long-range valid contacts and trans valid contacts do not contribute to this inferred ChIP-like 1D signal. They remain available in the original HiC-Pro valid-pair/contact inputs for FitHiChIP. `signal/read_selection.tsv` records the input source, eligible pairs, selected pairs after deduplication, and retained BED read ends.
+
+### Narrow and broad MACS2 modes
+
+The `fithichip_peak_types` map controls the target class:
+
+```groovy
+params.fithichip_peak_types = [
+    '27ac': 'narrow',
+    '9ac': 'narrow',
+    '27me3': 'broad',
+    '9me3': 'broad',
+    'pol2': 'narrow',
+    'custom_sample': 'narrow'
 ]
 ```
 
-Samples missing from the map use automatic peak inference. Supplied BED files are copied to the task's standard filename `peaks.narrowPeak`; their contents are not converted into the ten-column narrowPeak format.
+A complete sample-name key takes priority. Otherwise the final mark token is used, ignoring an optional numeric replicate suffix and an optional `H3K` prefix. Examples: `control-27ac-1`, `control_H3K27ac_2`, and `control-27me3-1`. Unknown targets require an explicit map entry, including when supplied loop-anchor peaks are used, because per-sample MACS2 signal generation is retained.
 
-## Expected output ##
-
-The pipeline creates a separate folder for each sample under `-output-dir`:
+Shared MACS2 options default to:
 
 ```text
-output/<sample>/
-├── fastqs/
-│   ├── <sample>_merged_R1.fq.gz
-│   ├── <sample>_merged_R2.fq.gz
-│   └── <sample>_cutadapt.log
-├── hicpro/
-│   ├── config-hicpro.txt
-│   ├── rawdata/
-│   ├── bowtie_results/
-│   ├── hic_results/
-│   │   ├── data/<sample>/
-│   │   ├── matrix/<sample>/
-│   │   │   ├── raw/
-│   │   │   └── iced/
-│   │   ├── stats/<sample>/
-│   │   └── pic/<sample>/
-│   └── logs/<sample>/
-├── FitHiChIP_peaks/
-│   └── peaks/
-│       ├── peaks.narrowPeak
-│       ├── peak_calling.log                 # Automatic peak inference only
-│       └── MACS2_ExtSize/                  # Automatic peak inference only
-├── FitHiChIP_L/
-│   ├── configuration_file
-│   ├── run.log
-│   ├── Summary_results_FitHiChIP.html
-│   └── ...                                # Native FitHiChIP results
-└── FitHiChIP_S/
-    ├── configuration_file
-    ├── run.log
-    ├── Summary_results_FitHiChIP.html
-    └── ...
+-q 0.05 --extsize 147 --nomodel
 ```
 
-The `fastqs/` folder publishes **merged FASTQs and the cutadapt log**. Trimmed reads are passed to HiC-Pro and are represented in its `rawdata/` folder; they are not separately published as cutadapt FASTQs in `fastqs/`.
+The workflow adds `--broad --broad-cutoff 0.1` for broad targets and adds `-B --SPMR` for pileup output. Configure broad mode through the map and broad cutoff parameter, rather than adding `--broad` to the shared options. `--call-summits` is incompatible with broad targets. MACS2's own read-tag filtering applies in addition to pair-level deduplication; set its options deliberately if changing that behavior.
 
-HiC-Pro's main contact-level result is `hic_results/data/<sample>/<sample>.allValidPairs`, containing valid contacts after duplicate removal. Matrix results include the raw sparse `.matrix`, bin-coordinate `_abs.bed`, ICE-normalized matrix, and bias files at each configured resolution.
+### 1D bigWig tracks
 
-For FitHiChIP, open `Summary_results_FitHiChIP.html` in each L/S folder to locate the native output files. With the default settings, scored and significant interaction files are under:
+**Every sample gets its own track in all three peak-file cases:**
 
 ```text
-FitHiChIP_Peak2ALL_b5000_L20000_U2000000/
-  P2PBckgr_<0-or-1>/Coverage_Bias/FitHiC_BiasCorr/
+results/<sample>/bw/<sample>.plac_1d.cpm.bw
 ```
 
-`FitHiChIP.interactions_FitHiC.bed` contains scored interactions.  
-`FitHiChIP.interactions_FitHiC_Q0.05.bed` contains interactions passing the significance threshold.  
-Merge-filtered and browser-compatible outputs are produced when applicable.
+MACS2 runs per sample on the selected read-end BED to produce the treatment pileup with `-B --SPMR`. This is signal per million MACS2-retained tags. The pileup is clipped, sorted, and converted with `bedGraphToBigWig`. It is an inferred PLAC-seq/HiChIP 1D signal, rather than an independent ChIP-seq measurement.
 
-A completed analysis may find no significant loops; this is distinct from a runtime failure. Failed tasks may not publish their results: inspect `run.log` in the work directory printed by Nextflow, along with `.command.err` and `.nextflow.log`.
+For blank `peak_file` values, the sample peak set and track use the same MACS2 run. For a missing shared path, loop anchors use the pooled MACS2 run while each track uses its own sample's selected reads with the same settings. With externally supplied peaks, the supplied file defines loop anchors and the track still represents the sample's inferred MACS2 signal. Per-sample inferred peaks are retained for QC in all cases; they are not substituted for supplied/shared anchors.
 
-`main_hic_pro.nf` is the HiC-Pro-only backup. It uses the current `nextflow.config` but does not execute FitHiChIP.
+Converter selection is:
+
+1. Use the executable path in `bedgraph_to_bigwig`, if nonempty.
+2. Otherwise use `$CONDA_PREFIX/bin/bedGraphToBigWig`, if executable.
+3. Otherwise search `PATH`.
+
+An explicitly configured invalid path fails; it is not silently replaced by another executable.
+
+## Run
+
+```bash
+nextflow run main.nf \
+  -c site.config \
+  --input_csv /path/to/samplesheet.csv \
+  -output-dir /path/to/results \
+  -with-report nf_plac_report.html \
+  -with-timeline nf_plac_timeline.html \
+  -with-trace nf_plac_trace.tsv \
+  -resume
+```
+
+Add `-bg` for a background run. `-preview` checks compilation and configuration without executing analysis tasks; valid reference settings are still needed. Keep `work/` and `.nextflow/` for resume. Intermediate workflow outputs explicitly use copy mode so publishing cannot move files away from downstream tasks; `workflow.output.mode='copy'` remains the recommended default.
+
+## Expected output
+
+```text
+results/
+├── <sample>/
+│   ├── fastqs/                         # Merged FASTQs and cutadapt log
+│   ├── hicpro/
+│   │   ├── config-hicpro.txt
+│   │   └── hic_results/
+│   │       ├── data/<sample>/           # .allValidPairs and interaction classes
+│   │       └── matrix/<sample>/         # raw/ and iced/ at configured resolutions
+│   ├── bw/<sample>.plac_1d.cpm.bw
+│   ├── PLAC_signal/signal/
+│   │   ├── MACS2_input.bed
+│   │   ├── inferred_peaks.bed
+│   │   ├── MACS2_ExtSize/
+│   │   ├── peak_calling.log
+│   │   ├── read_selection.tsv
+│   │   └── plac_1d.cpm.bedGraph
+│   ├── FitHiChIP_peaks/peaks/
+│   │   ├── peaks.bed                   # Actual anchors passed to FitHiChIP
+│   │   ├── source.json                 # sample / provided / shared and group members
+│   │   └── validation.json
+│   ├── FitHiChIP_L/
+│   │   ├── configuration_file
+│   │   ├── run.log
+│   │   ├── Summary_results_FitHiChIP.html
+│   │   └── ...
+│   └── FitHiChIP_S/                    # Same structure, strict background
+└── shared_peaks/group_<path-hash>/peaks/ # Only for missing nonempty paths
+    ├── MACS2_input.bed                 # Pooled selected read ends
+    ├── peaks.bed
+    ├── group.json
+    ├── validation.json
+    ├── MACS2_ExtSize/
+    └── peak_calling.log
+```
+
+FitHiChIP uses each sample's **raw** matrix, matching `_abs.bed`, deduplicated `.allValidPairs`, and assigned `FitHiChIP_peaks/peaks/peaks.bed`. ICE matrices are retained for visualization. Scored/significant loops appear in native FitHiChIP subfolders, for example:
+
+```text
+FitHiChIP_L/FitHiChIP_Peak2ALL_b10000_L20000_U2000000/
+  P2PBckgr_0/Coverage_Bias/FitHiC_BiasCorr/
+```
+
+`FitHiChIP.interactions_FitHiC.bed` is the full scored contact table. `FitHiChIP.interactions_FitHiC_Q0.05.bed` contains significant contacts. Keep full scored tables and separate biological samples for differential analysis. A successful analysis can have zero significant loops; runtime errors and missing scoring outputs still fail.
+
+## Tests and troubleshooting
+
+After activating the environment:
+
+```bash
+python -m unittest discover -s tests -p 'test_*.py' -v
+python tests/run_smoke_tests.py --bedgraph-to-bigwig /path/to/bedGraphToBigWig
+```
+
+The smoke test creates small synthetic files and runs real cutadapt, MACS2, and bigWig conversion. HiC-Pro and FitHiChIP are explicit test doubles in this routing test; it does not validate their alignment or statistical algorithms. It checks all peak modes, broad/narrow behavior, gzip, duplicate selection, the 999/1,000 bp boundary, separate sample tracks, pooled-read counts, output publication, and L/S input handoffs. It also tests invalid input plans, resumes after shared paths become supplied inputs, and restores a missing requested peak file from cache. Run it in a fresh temporary directory when setting `--work-dir`.
+
+For failures, inspect `.command.err`, `.command.sh`, and `.command.out` in the reported task work directory, plus `.nextflow.log`. For peaks, inspect the MACS2 log, `read_selection.tsv`, `source.json`, and `validation.json`. Empty/unusable supplied peaks, inconsistent peak values across lanes, unknown target types, and mixed broad/narrow shared groups fail explicitly. Use a new missing path when deliberately regenerating a shared peak group.
+
+## References
+
+- [HiC-Pro documentation](https://nservant.github.io/HiC-Pro/)
+- [FitHiChIP documentation](https://ay-lab.github.io/FitHiChIP/)
+- [FitHiChIP study](https://doi.org/10.1038/s41467-019-11950-y)
+- [MACS2](https://github.com/macs3-project/MACS)
+- [Nextflow documentation](https://www.nextflow.io/docs/stable/)
