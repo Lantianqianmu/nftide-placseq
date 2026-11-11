@@ -206,7 +206,55 @@ params.fithichip_peak_types = [
 ]
 ```
 
-A complete sample-name key takes priority. Otherwise the final mark token is used, ignoring an optional numeric replicate suffix and an optional `H3K` prefix. Examples: `control-27ac-1`, `control_H3K27ac_2`, and `control-27me3-1`. Unknown targets require an explicit map entry, including when supplied loop-anchor peaks are used, because per-sample MACS2 signal generation is retained.
+#### How a sample name selects its peak type
+
+The lookup uses the **`sample` column of the samplesheet**. Sample names, map keys, and `broad`/`narrow` values are matched case-insensitively. For each sample:
+
+1. **Look for an exact full sample-name key first.** For example, `'my_library_1': 'broad'` applies to the sample ID `my_library_1`. This exact entry takes priority over a mark-based entry.
+2. **If there is no exact match, derive a mark key from the sample name:**
+   - Remove one final numeric replicate suffix consisting of a separator and digits, such as `-1`, `_2`, or `.3`.
+   - Split the remaining name on hyphens, underscores, or periods, and take the final token.
+   - Remove an optional `H3K` prefix from that token. Use the resulting key, such as `27ac` or `27me3`, to look up the map.
+3. **Require a matching `broad` or `narrow` value.** If neither lookup succeeds, the workflow stops with `Cannot determine MACS2 peak type ...` and asks for a sample-name or mark entry.
+
+For example, `control_H3K27me3_2` becomes `control_h3k27me3_2`, then `control_h3k27me3`, then `h3k27me3`, and finally the lookup key `27me3`.
+
+With the example map above:
+
+| Samplesheet `sample` | Matching key | Result |
+| --- | --- | --- |
+| `control-27ac-1` | `27ac` | narrow |
+| `control_H3K27ac_2` | `27ac` | narrow |
+| `control.H3K9me3.3` | `9me3` | broad |
+| `control-pol2` | `pol2` | narrow |
+| `custom_sample` | Exact full name `custom_sample` | narrow |
+| `custom_sample-1` | Fallback token `sample` has no entry | Error; add the full sample ID |
+| `control-27ac-rep1` | Fallback token `rep1` has no entry | Error; add the full sample ID or use a numeric suffix |
+
+#### What `custom_sample` means
+
+**`custom_sample` is a literal example sample ID.** It is not a wildcard, a prefix rule, or a default for all custom libraries. The entry `'custom_sample': 'narrow'` matches `custom_sample` exactly (ignoring case). It does not automatically match `custom_sample-1`, `custom_sample-2`, or `custom_sample_rep1`.
+
+For custom names without a recognized mark token, replace the example key with each complete sample ID. Keep the mark entries for any other samples that use them:
+
+```groovy
+params.fithichip_peak_types = [
+    '27ac': 'narrow',
+    '9ac': 'narrow',
+    '27me3': 'broad',
+    '9me3': 'broad',
+    'pol2': 'narrow',
+    'custom_sample-1': 'narrow',
+    'custom_sample-2': 'narrow',
+    'repressive_library_rep1': 'broad'
+]
+```
+
+Alternatively, sample IDs such as `custom-27ac-1` and `custom-27ac-2` both use the `27ac` entry automatically. Only numeric replicate suffixes are removed; suffixes such as `rep1`, `r1`, or `lane1` require an explicit full-name entry when they occupy the final token. An exact full-name key always takes priority: adding `'control-27ac-1': 'broad'` would override the `27ac` narrow setting for that one sample.
+
+The mapping is required even when the samplesheet supplies an existing peak file, because per-sample MACS2 signal generation is retained. Samples sharing a missing peak-file path must resolve to the same broad/narrow class.
+
+#### MACS2 options
 
 Shared MACS2 options default to:
 
