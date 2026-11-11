@@ -1,0 +1,33 @@
+{
+  "description": "Pre-edit pipeline code and configuration for branch 1.0.1. The public example samplesheet is retained; original input metadata and reference assets are stored in a separate local snapshot.",
+  "files": {
+    "main.nf": {
+      "sha256": "53fc1f9e09d2779d27ed651c83b71f7bbc100792b810db38980ae4c020ec88af",
+      "bytes": 18690
+    },
+    "main_hic_pro.nf": {
+      "sha256": "fbb09630f9dd650f8841b8b0eefc0a18627da8923f322e02e86f556e8cb2fe13",
+      "bytes": 5521
+    },
+    "nextflow.config": {
+      "sha256": "663ccefa7c4c84bc860069ec1f71d0ca563f0b44f4a269f0fec2a8f3d1c70f17",
+      "bytes": 3191
+    },
+    "README.md": {
+      "sha256": "75c516f34a3ea31444724c82638e6f13f55f6f7ed2ae7fa6796218172959d3f4",
+      "bytes": 11534
+    },
+    "placseq.yml": {
+      "sha256": "4d3406104347dfd77542f151274e9f346a5f2446733596c71b2aa09b4a86e5aa",
+      "bytes": 9907
+    },
+    "renv.lock": {
+      "sha256": "d8738f092bfe9172f29d55b49845c72a5ea6dcad327bec4bc48d591e9e3f6e42",
+      "bytes": 230990
+    },
+    "bin/bedToBigBed": {
+      "sha256": "0585eaf86605c259895fc102e89778e5df70bb2f412b134fe346a7c7c40774e7",
+      "bytes": 13076040
+    }
+  }
+}

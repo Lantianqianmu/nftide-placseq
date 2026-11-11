@@ -13,23 +13,23 @@ If peak files are not provided, narrow peaks are inferred from HiC-Pro results u
 
 The default reference is **hg38_HBV_A**, with MboI restriction fragments. HiC-Pro produces raw and ICE-normalized contact maps at **5 kb, 10 kb, 100 kb, and 1 Mb**. FitHiChIP uses the **5 kb raw matrix**.
 
-## Major software dependencies ##
+## Software dependencies ##
 
 Dependencies | Version / configuration
 ------------- | -------------
 Nextflow | 25.10.2
-HiC-Pro | 3.1.0; manually installed by user
-FitHiChIP | 11.0; manually installed by user
-MACS2 | 2.2.9.1
-samtools | 1.16
-Bowtie2 | 2.5.4
-bedtools | 2.26.0
+Java | Compatible with the installed Nextflow; existing launcher uses the `hic` environment
+HiC-Pro | 3.1.0
+FitHiChIP | Installed at `/home/xrz/FitHiChIP`
+MACS2 | 2.2.9.1; resolved from the active conda environment
+samtools | 1.16; resolved from the active conda environment for FitHiChIP
+Bowtie2 | Required by HiC-Pro
+bedtools, bgzip, tabix | Required by FitHiChIP
 Python | With HiC-Pro dependencies and FitHiChIP's networkx dependency
 R | With packages required by HiC-Pro and FitHiChIP, including optparse, data.table, ggplot2, fdrtool and GenomicRanges
 bedToBigBed | Browser-output helper available in the pipeline's `bin/` directory
 
-Softwares installed by conda/mamba if not specified.  
-HiC-Pro uses the dependency paths in its installed `config-system.txt`, so install HiC-Pro **after** the installation of the conda enviroment, and provide dependency paths of the placseq conda environment. 
+HiC-Pro uses the dependency paths in its installed `config-system.txt`, so install HiC-Pro **after** the installation of the conda enviroment, and provide dependency paths of the placseq conda environment. FitHiChIP and peak calling use tools from the active environment. MACS2 and samtools have no explicit executable overrides in this workflow.
 
 ## Installation ##
 
@@ -56,15 +56,15 @@ Rscript -e 'renv::restore(lockfile = "renv.lock", prompt = FALSE)'
 
 `placseq.yml` recreates the pinned mamba/conda packages. `renv.lock` restores the R package versions into the repository-local `renv` library. The restore needs network access to CRAN and Bioconductor the first time it is run.
 
-This workflow also requires [HiC-Pro](https://github.com/nservant/HiC-Pro) and [FitHiChIP](https://github.com/ay-lab/FitHiChIP). Users needed to install them manually. Set installation paths of `hicpro` and `fithichip_dir` in `nextflow.config`.
+This workflow also requires HiC-Pro and FitHiChIP. Users needed to install them manually. Set installation paths of `hicpro` and `fithichip_dir` in `nextflow.config`.
 
-(4) Prepare a Bowtie2 index, chromosome-size file, and restriction-fragment BED for the same reference. Modify `nextflow.config` accordingly. Current defaults for demonstration are:
+(4) Prepare a Bowtie2 index, chromosome-size file, and restriction-fragment BED for the same reference. Modify `nextflow.config` accordingly. Current defaults are:
 
 ```text
-bowtie2_index = "/data/xrz/ref/hg38_HBV_A_bowtie2/hg38_HBV_A"
-chrom_sizes = "hg38_original_chrom_sizes.tsv"
-genome_fragment = "hg38_HBV_A_MboI.bed"
-ligation_site = "GATCGATC"
+Bowtie2 index prefix: /data/xrz/ref/hg38_HBV_A_bowtie2/hg38_HBV_A
+Chromosome sizes:    hg38_original_chrom_sizes.tsv
+MboI fragments:      hg38_HBV_A_MboI.bed
+Ligation sequence:  GATCGATC
 ```
 
 The chromosome-size file must include the reference sequences to be represented in the contact maps. The Bowtie2 parameter is an **index prefix**, not just the containing folder. Prepare restriction enzyme cut sites following the instruction of HiC-Pro, and provide the correct logation sequences for HiC-Pro.
@@ -98,6 +98,16 @@ nextflow run main.nf \
   -resume -bg
 ```
 
+If Nextflow and Java are not on PATH in `placseq`, use the existing installation explicitly:
+
+```bash
+mamba run -n placseq env JAVA_HOME=/home/xrz/miniforge3/envs/hic \
+  /home/xrz/miniforge3/envs/hic/bin/nextflow run main.nf \
+  --input_csv samplesheet.csv \
+  -output-dir /data/xrz/PLAC/output \
+  -resume
+```
+
 `-output-dir`: Output directory; default is `/data/xrz/PLAC/output`.  
 `--input_csv`: Samplesheet; default is `samplesheet.csv`. Use `samplesheet_test.csv` for the included small inputs.  
 `-resume`: Reuse completed tasks whose inputs and settings match the cache. Keep both `work/` and `.nextflow/`. Interrupted tasks may need to restart.  
@@ -117,7 +127,7 @@ Parameter | Default | Description
 `adapter_overlap` | `1` | Minimum adapter overlap
 `min_mapq` | `10` | HiC-Pro mapping-quality threshold
 `fithichip_bin_size` | `5000` | FitHiChIP BINSIZE; must occur in `bin_size`
-`fithichip_circular_genome` | `0` | CircularGenome, 1=circular and 0=linear
+`fithichip_circular_genome` | `0` | CircularGenome
 `fithichip_int_type` | `3` | IntType: peak-to-all interactions
 `fithichip_low_dist` | `20000` | Minimum loop distance in bp
 `fithichip_upp_dist` | `2000000` | Maximum loop distance in bp

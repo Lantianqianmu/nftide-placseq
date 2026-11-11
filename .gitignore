@@ -1,0 +1,9 @@
+.nextflow*
+work/
+results/
+validation/
+*.trace.tsv
+*.fastq*
+*.fq*
+*.bam
+*.bai
